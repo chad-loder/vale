@@ -50,6 +50,7 @@ type File struct {
 	Path       string            // the full path
 	NormedPath string            // the normalized path
 	Transform  string            // XLST transform
+	Sic        []string          // what a `[sic]` marker withdraws here; see sic.go
 	Held       map[string]bool   // the conditional sections whose `if` held
 	RealExt    string            // actual file extension
 	Checks     map[string]bool   // syntax-specific checks assigned in .vale
@@ -242,6 +243,17 @@ func NewFile(src string, config *Config) (*File, error) {
 			}
 		}
 	}
+	sic := config.Sic["*"]
+	for _, sec := range config.RuleKeys {
+		if config.SectionApplies(sec, held, path) {
+			// Sections are visited in the order they were written, so a
+			// later one wins -- for this file, and no other. See #965.
+			if s, ok := config.Sic[sec]; ok {
+				sic = s
+			}
+		}
+	}
+
 	content := Sanitize(string(fbytes))
 
 	// NOTE: We need to perform a clone here because we perform inplace editing
@@ -255,7 +267,7 @@ func NewFile(src string, config *Config) (*File, error) {
 		BaseStyles: baseStyles, Checks: checks, Levels: levels, Unset: unset, Vocab: vocab,
 		Lines: lines, Content: content,
 		Comments: make(map[string]bool), history: make(map[string]int),
-		simple: config.Flags.Simple, Transform: transform, Held: held,
+		simple: config.Flags.Simple, Transform: transform, Held: held, Sic: sic,
 		limits: make(map[string]int), Path: path, Metrics: make(map[string]int),
 		NLP:    nlp.Info{Endpoint: config.NLPEndpoint, Lang: lang},
 		Lookup: lookup, NormedPath: normed,
@@ -696,6 +708,12 @@ func (f *File) AddAlert(a Alert, blk nlp.Block, lines, pad int, lookup bool) {
 	// Hidden rather than dropped: the masking below must still consume the
 	// occurrence, or the next alert from this check finds it again.
 	if !a.Hide && f.RegionDisabled(a.Check, a.Match, a.Line, a.Span[0]) {
+		a.Hide = true
+	}
+
+	// A `[sic]` after the match withdraws it the same way, and for the same
+	// reason is hidden rather than dropped.
+	if !a.Hide && a.Sic && f.sicFollows(a) {
 		a.Hide = true
 	}
 

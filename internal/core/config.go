@@ -219,6 +219,7 @@ type Config struct {
 	StyleSources      map[string]string            // The file each section's BasedOnStyles comes from
 	Vocabularies      map[string]*Vocabulary       // Every vocabulary loaded, by name
 	SkippedScopes     []string                     // A list of HTML blocks to ignore
+	Sic               map[string][]string          // What a `[sic]` marker withdraws, by section; see sic.go
 	Stylesheets       map[string]string            // XSLT stylesheet
 	TokenIgnores      map[string][]string          // A list of tokens to ignore
 	CommentDelimiters map[string][2]string         // Strings to treat as comment delimiters. Indicates the start and end delimiters.
@@ -274,6 +275,7 @@ func NewConfig(flags *CLIFlags) (*Config, error) {
 	cfg.cache = &sync.Map{}
 	cfg.SecToPat = make(map[string]glob.Glob)
 	cfg.SecToCond = make(map[string]*Condition)
+	cfg.Sic = make(map[string][]string)
 	cfg.Stylesheets = make(map[string]string)
 	cfg.TokenIgnores = make(map[string][]string)
 	cfg.CommentDelimiters = make(map[string][2]string)

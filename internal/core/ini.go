@@ -350,6 +350,10 @@ var syntaxOpts = map[string]func(string, *ini.Section, *Config) error{
 		cfg.FormatToLang[label] = sec.Key("Lang").String()
 		return nil
 	},
+	"Sic": func(label string, sec *ini.Section, cfg *Config) error { //nolint:unparam
+		cfg.Sic[label] = ParseSic(sec.Key("Sic").String())
+		return nil
+	},
 	"View": func(label string, sec *ini.Section, cfg *Config) error {
 		name := sec.Key("View").String()
 
@@ -384,6 +388,9 @@ var globalOpts = map[string]func(*ini.Section, *Config){
 	},
 	"Lang": func(sec *ini.Section, cfg *Config) {
 		cfg.FormatToLang["*"] = sec.Key("Lang").String()
+	},
+	"Sic": func(sec *ini.Section, cfg *Config) {
+		cfg.Sic["*"] = ParseSic(sec.Key("Sic").String())
 	},
 }
 

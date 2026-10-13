@@ -189,6 +189,9 @@ func GetComments(source []byte, lang *Language) ([]Comment, error) {
 		if lang.Doc != nil {
 			joined[i].Masks = lang.Doc(c.Text)
 		}
+		if c.Format == "" {
+			joined[i].Masks = append(joined[i].Masks, codeRanges(c.Text)...)
+		}
 		if m, ok := leadingMask(c.Text, c.Doc); ok {
 			joined[i].Masks = append(joined[i].Masks, m)
 		}

@@ -282,9 +282,13 @@ func maskedOffset(ctx, masked string, at int) int {
 	return len(masked)
 }
 
-// located is positionOf with the match's byte index in the unmasked context.
+// located converts a match offset into the 1-based rune position reported, and
+// the match's byte index in the unmasked context.
+//
+// An underscore the search consumed as a boundary is not part of the match and
+// is stepped over. One that begins the match itself -- `_signal` -- is kept.
 func located(ctx string, idx int, sub string, shift int) (int, string, int) {
-	if strings.HasPrefix(ctx[idx:], "_") {
+	if strings.HasPrefix(ctx[idx:], "_") && !strings.HasPrefix(ctx[idx:], sub) {
 		idx++
 	}
 	return nlp.StrLen(ctx[:idx]) + 1, sub, idx + shift

@@ -184,10 +184,11 @@ func goDocName(n *sitter.Node, src []byte) string {
 	return ""
 }
 
-// Masked reports whether the position -- a 1-based line of the comment's
-// text and a 1-based column in runes, as an alert carries them -- falls in
-// one of the comment's masks.
-func (c Comment) Masked(line, col int) bool {
+// Masked reports whether a match of size bytes, starting at the position -- a
+// 1-based line of the comment's text and a 1-based column in runes, as an
+// alert carries them -- lies wholly in one of the comment's masks. A match that
+// only starts in one, such as a sentence opening with a code span, is prose.
+func (c Comment) Masked(line, col, size int) bool {
 	if len(c.Masks) == 0 {
 		return false
 	}
@@ -208,7 +209,7 @@ func (c Comment) Masked(line, col int) bool {
 	}
 
 	for _, m := range c.Masks {
-		if at >= m[0] && at < m[1] {
+		if at >= m[0] && at < m[1] && at+size <= m[1] {
 			return true
 		}
 	}

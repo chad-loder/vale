@@ -80,13 +80,14 @@ func TestPyDocMasks(t *testing.T) {
 func TestMaskedByLineAndColumn(t *testing.T) {
 	c := Comment{Text: "ab\ncdé f", Masks: []Mask{{3, 7}}}
 	for _, tc := range []struct {
-		line, col int
-		want      bool
+		line, col, size int
+		want            bool
 	}{
-		{1, 1, false}, {1, 2, false}, {2, 1, true}, {2, 3, true}, {2, 4, false}, {2, 5, false}, {3, 1, false},
+		{1, 1, 1, false}, {1, 2, 1, false}, {2, 1, 1, true}, {2, 3, 1, true}, {2, 4, 1, false}, {2, 5, 1, false},
+		{3, 1, 1, false}, {2, 1, 4, true}, {2, 3, 2, true}, {2, 1, 5, false}, {2, 2, 6, false},
 	} {
-		if got := c.Masked(tc.line, tc.col); got != tc.want {
-			t.Errorf("Masked(%d, %d) = %v, want %v", tc.line, tc.col, got, tc.want)
+		if got := c.Masked(tc.line, tc.col, tc.size); got != tc.want {
+			t.Errorf("Masked(%d, %d, %d) = %v, want %v", tc.line, tc.col, tc.size, got, tc.want)
 		}
 	}
 }

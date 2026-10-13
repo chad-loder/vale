@@ -130,3 +130,52 @@ cases:
       test.ts:2:23:Vale.Spelling:Did you really mean 'Recrod'?
       test.ts:8:33:Vale.Spelling:Did you really mean 'Recrod'?
       test.ts:15:38:Vale.Spelling:Did you really mean 'Recrod'?
+
+  - name: comment-columns
+    about: |
+      An alert on the first line of a `/**` block was reported two columns
+      short in TypeScript, and so was every `/**` line in JavaScript, whose
+      delimiter pattern strips the whole opener. The column is now where the
+      extracted line sits in its source line.
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*.{ts,js}]
+        BasedOnStyles = T
+      styles/T/Zebra.yml: |
+        extends: existence
+        message: "Found '%s'."
+        level: error
+        tokens:
+          - ZEBRA
+      test.ts: |
+        /** one ZEBRA here */
+            /** two ZEBRA here */
+        /** three ZEBRA
+         * four ZEBRA
+         */
+        // five ZEBRA
+        x();
+      test.js: |
+        /** one ZEBRA here */
+            /** two ZEBRA here */
+        /** three ZEBRA
+         * four ZEBRA
+         */
+        // five ZEBRA
+        x();
+    args: test.ts test.js
+    exit: 1
+    want: |
+      test.js:1:9:T.Zebra:Found 'ZEBRA'.
+      test.js:2:13:T.Zebra:Found 'ZEBRA'.
+      test.js:3:11:T.Zebra:Found 'ZEBRA'.
+      test.js:4:9:T.Zebra:Found 'ZEBRA'.
+      test.js:6:9:T.Zebra:Found 'ZEBRA'.
+      test.ts:1:9:T.Zebra:Found 'ZEBRA'.
+      test.ts:2:13:T.Zebra:Found 'ZEBRA'.
+      test.ts:3:11:T.Zebra:Found 'ZEBRA'.
+      test.ts:4:9:T.Zebra:Found 'ZEBRA'.
+      test.ts:6:9:T.Zebra:Found 'ZEBRA'.

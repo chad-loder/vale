@@ -537,6 +537,57 @@ func spanAt(ctx string, col, begin, end int) []int {
 	return span
 }
 
+func mappable(blk nlp.Block, a Alert) bool {
+	_, _, ok := sourceSpanOf(blk, a)
+	return ok
+}
+
+// sourceSpanOf maps an alert's span in the block's text to byte offsets in the
+// document. Checks report spans in runes (regex rules) or bytes (spelling), so
+// both readings are tried and the one that cuts out exactly the matched text is
+// used. The end is the source position after the match's last character, which
+// includes any markup inside the match.
+func sourceSpanOf(blk nlp.Block, a Alert) (int, int, bool) {
+	if len(a.Span) < 2 || a.Span[0] < 0 || a.Span[1] <= a.Span[0] {
+		return 0, 0, false
+	}
+
+	candidates := [][2]int{}
+	if b0, b1, ok := blk.ByteSpan(a.Span[0], a.Span[1]); ok {
+		candidates = append(candidates, [2]int{b0, b1})
+	}
+	candidates = append(candidates, [2]int{a.Span[0], a.Span[1]})
+
+	for _, c := range candidates {
+		if c[1] > len(blk.Text) || blk.Text[c[0]:c[1]] != a.Match {
+			continue
+		}
+		start, last := blk.SourceOffset(c[0]), blk.SourceOffset(c[1]-1)
+		if start < 0 || last < start || last >= len(blk.Context) {
+			continue
+		}
+		// Only inline emphasis or code markers may sit inside the match. If
+		// anything else does -- a tag the extraction dropped, joining the words
+		// on either side into one -- the match is not text the source holds.
+		if stripInlineMarkers(blk.Context[start:last+1]) != a.Match {
+			continue
+		}
+		return start, last + 1, true
+	}
+	return 0, 0, false
+}
+
+// stripInlineMarkers removes Markdown emphasis and code-span markers.
+func stripInlineMarkers(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch r {
+		case '*', '_', '`', '~':
+			return -1
+		}
+		return r
+	}, s)
+}
+
 // SetText updates the file's content, lines, and history.
 func (f *File) SetText(s string) {
 	f.Content = s
@@ -586,6 +637,12 @@ func (f *File) AddAlert(a Alert, blk nlp.Block, lines, pad int, lookup bool) {
 		a.Line, a.Span = f.byteLoc(blk.Context, a.Span[0], a.Span[1], pad)
 	case a.Match == "" && f.locateMeasurement(&a, blk, pad):
 		// A measurement has no text to find; locateMeasurement placed it.
+	case a.Match != "" && !strings.Contains(blk.Context, a.Match) && mappable(blk, a):
+		// The match is not in the document as written -- inline markup sits
+		// inside it, as `§3**.` holds `§3.` -- so no search can find it. The
+		// block still knows where each piece of its text came from.
+		start, end, _ := sourceSpanOf(blk, a)
+		a.Line, a.Span = f.byteLoc(blk.Context, start, end, pad)
 	case strings.HasPrefix(blk.Scope, "raw") && a.Match != "" &&
 		a.Span[0] >= 0 && a.Span[1] <= len(blk.Context) &&
 		blk.Context[a.Span[0]:a.Span[1]] == a.Match:

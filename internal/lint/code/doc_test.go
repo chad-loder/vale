@@ -77,16 +77,50 @@ func TestPyDocMasks(t *testing.T) {
 		[]string{"the identifier", "when it fails", "the payload", "Reads"})
 }
 
+func TestCodeMasks(t *testing.T) {
+	text := "A host (`fr_FR` → `jeu. 30 juil. …`) fails.\n" +
+		"Run ``a ` b`` and `x` then.\n" +
+		"An `unclosed span stays prose.\n" +
+		"```ts\nconst value = read(x);\n```\n" +
+		"After the fence.\n" +
+		"~~~~\nlet y = 1;\n~~~\nstill = code;\n~~~~\n" +
+		"Tail text.\n"
+	checkMasks(t, codeRanges(text), text,
+		[]string{"`fr_FR`", "`jeu. 30 juil. …`", "``a ` b``", "`x`",
+			"```ts\nconst value = read(x);\n```\n", "let y = 1;\n~~~\nstill = code;\n~~~~\n"},
+		[]string{"A host", "fails", "Run", "then", "unclosed span stays prose", "After the fence", "Tail text"})
+}
+
+func TestCodeMasksUnclosedFenceRunsToTheEnd(t *testing.T) {
+	text := "Intro.\n```\nconst a = 1;\nconst b = 2;\n"
+	checkMasks(t, codeRanges(text), text,
+		[]string{"```\nconst a = 1;\nconst b = 2;\n"}, []string{"Intro"})
+}
+
+func TestPlainCommentsMaskCode(t *testing.T) {
+	src := "/**\n * Reads it.\n *\n * ```typescript\n * const value = read();\n * ```\n */\nexport function f() {}\n\n// A host (`fr_FR` → `jeu. 30 juil. …`) fails.\nf();\n"
+	comments, err := GetComments([]byte(src), TypeScript())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(comments) != 2 {
+		t.Fatalf("got %d comments, want 2", len(comments))
+	}
+	checkMasks(t, comments[0].Masks, comments[0].Text, []string{"const value = read();"}, []string{"Reads it"})
+	checkMasks(t, comments[1].Masks, comments[1].Text, []string{"`jeu. 30 juil. …`"}, []string{"A host", "fails"})
+}
+
 func TestMaskedByLineAndColumn(t *testing.T) {
 	c := Comment{Text: "ab\ncdé f", Masks: []Mask{{3, 7}}}
 	for _, tc := range []struct {
-		line, col int
-		want      bool
+		line, col, size int
+		want            bool
 	}{
-		{1, 1, false}, {1, 2, false}, {2, 1, true}, {2, 3, true}, {2, 4, false}, {2, 5, false}, {3, 1, false},
+		{1, 1, 1, false}, {1, 2, 1, false}, {2, 1, 1, true}, {2, 3, 1, true}, {2, 4, 1, false}, {2, 5, 1, false},
+		{3, 1, 1, false}, {2, 1, 4, true}, {2, 3, 2, true}, {2, 1, 5, false}, {2, 2, 6, false},
 	} {
-		if got := c.Masked(tc.line, tc.col); got != tc.want {
-			t.Errorf("Masked(%d, %d) = %v, want %v", tc.line, tc.col, got, tc.want)
+		if got := c.Masked(tc.line, tc.col, tc.size); got != tc.want {
+			t.Errorf("Masked(%d, %d, %d) = %v, want %v", tc.line, tc.col, tc.size, got, tc.want)
 		}
 	}
 }

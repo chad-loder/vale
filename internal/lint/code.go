@@ -166,7 +166,7 @@ func dropMasked(alerts []core.Alert, last int, comment code.Comment) []core.Aler
 	}
 	kept := alerts[:last]
 	for _, a := range alerts[last:] {
-		if !comment.Masked(a.Line, a.Span[0]) {
+		if !comment.Masked(a.Line, a.Span[0], len(a.Match)) {
 			kept = append(kept, a)
 		}
 	}

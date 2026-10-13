@@ -141,6 +141,88 @@ func PyDoc(s string) []Mask {
 	return append(out, ranges(pydocBareField, s)...)
 }
 
+// codeFence opens or closes a fenced code block: a run of three or more
+// backticks or tildes at the start of a line.
+var codeFence = regexp.MustCompile("^[ \t]*(`{3,}|~{3,})")
+
+// codeRanges masks the code in a comment read as plain lines: each fenced
+// block, from its opening fence through its closing one, and each inline
+// code span. Comments are written with Markdown's code markers whatever their
+// format, and a comment read as markup has these parsed out already.
+//
+// A fence closes on a run of its own character at least as long as the one
+// that opened it, and one left open runs to the end of the comment, as in
+// CommonMark.
+func codeRanges(s string) []Mask {
+	var out []Mask
+
+	at, open, opener := 0, -1, ""
+	for _, line := range strings.SplitAfter(s, "\n") {
+		fence := codeFence.FindStringSubmatch(line)
+		switch {
+		case open < 0 && fence != nil:
+			open, opener = at, fence[1]
+		case open >= 0 && fence != nil && fence[1][0] == opener[0] && len(fence[1]) >= len(opener):
+			out = append(out, Mask{open, at + len(line)})
+			open = -1
+		case open < 0:
+			for _, m := range spanRanges(line) {
+				out = append(out, Mask{at + m[0], at + m[1]})
+			}
+		}
+		at += len(line)
+	}
+	if open >= 0 {
+		out = append(out, Mask{open, len(s)})
+	}
+
+	return out
+}
+
+// spanRanges returns the byte range of each inline code span in a line,
+// backticks included. A span closes on a run of exactly as many backticks as
+// opened it; a run with no match is literal text.
+func spanRanges(line string) []Mask {
+	var out []Mask
+
+	run := func(i int) int {
+		n := 0
+		for i+n < len(line) && line[i+n] == '`' {
+			n++
+		}
+		return n
+	}
+
+	for i := 0; i < len(line); {
+		n := run(i)
+		if n == 0 {
+			i++
+			continue
+		}
+		end := -1
+		for j := i + n; j < len(line); {
+			m := run(j)
+			if m == 0 {
+				j++
+				continue
+			}
+			if m == n {
+				end = j + m
+				break
+			}
+			j += m
+		}
+		if end < 0 {
+			i += n
+			continue
+		}
+		out = append(out, Mask{i, end})
+		i = end
+	}
+
+	return out
+}
+
 // leadingMask masks name at the start of text, where a Go doc comment puts
 // the name of what it documents, and reports whether it was there.
 func leadingMask(text, name string) (Mask, bool) {
@@ -184,10 +266,11 @@ func goDocName(n *sitter.Node, src []byte) string {
 	return ""
 }
 
-// Masked reports whether the position -- a 1-based line of the comment's
-// text and a 1-based column in runes, as an alert carries them -- falls in
-// one of the comment's masks.
-func (c Comment) Masked(line, col int) bool {
+// Masked reports whether a match of size bytes, starting at the position -- a
+// 1-based line of the comment's text and a 1-based column in runes, as an
+// alert carries them -- lies wholly in one of the comment's masks. A match that
+// only starts in one, such as a sentence opening with a code span, is prose.
+func (c Comment) Masked(line, col, size int) bool {
 	if len(c.Masks) == 0 {
 		return false
 	}
@@ -208,7 +291,7 @@ func (c Comment) Masked(line, col int) bool {
 	}
 
 	for _, m := range c.Masks {
-		if at >= m[0] && at < m[1] {
+		if at >= m[0] && at < m[1] && at+size <= m[1] {
 			return true
 		}
 	}

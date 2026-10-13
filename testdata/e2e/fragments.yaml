@@ -90,6 +90,81 @@ cases:
       test.proto:5:4:T.Eror:Found 'Eror'.
       test.proto:7:4:T.Eror:Found 'Eror'.
 
+  - name: doc-mask-partial-match
+    about: |
+      A doc comment's masks drop the alerts inside them, like one on the symbol
+      a `{@link}` names. A match that only starts in a mask and runs on into
+      the prose was dropped with them.
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*.ts]
+        BasedOnStyles = T
+      styles/T/Phrase.yml: |
+        extends: existence
+        message: "Found '%s'."
+        level: error
+        nonword: true
+        tokens:
+          - '\{@link Foo\} runs on'
+      styles/T/Symbol.yml: |
+        extends: existence
+        message: "Found '%s'."
+        level: error
+        tokens:
+          - Foo
+      test.ts: |
+        /**
+         * See {@link Foo} runs on every call.
+         */
+        export function f() {}
+    args: test.ts
+    exit: 1
+    want: |
+      test.ts:2:8:T.Phrase:Found '{@link Foo} runs on'.
+
+  - name: plain-comment-code
+    about: |
+      A comment read as plain lines still marks code the Markdown way: a
+      fenced block and an inline code span are code, not prose. Only a word
+      touching a backtick was treated as code, so one inside a longer span
+      was flagged, and so was everything in a fenced example.
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*.{ts,py}]
+        BasedOnStyles = T
+      styles/T/Zebra.yml: |
+        extends: existence
+        message: "Found '%s'."
+        level: error
+        tokens:
+          - ZEBRA
+      test.ts: |
+        /**
+         * Reads it.
+         *
+         * ```ts
+         * const ZEBRA = read();
+         * ```
+         */
+        export function f() {}
+
+        // A host (`fr_FR` → `jeu. 30 ZEBRA …`) fails, and ZEBRA is prose.
+        f();
+      test.py: |
+        # Run ``a ZEBRA b`` and `x ZEBRA y`; ZEBRA here is prose.
+        x = 1
+    args: test.ts test.py
+    exit: 1
+    want: |
+      test.py:1:38:T.Zebra:Found 'ZEBRA'.
+      test.ts:10:52:T.Zebra:Found 'ZEBRA'.
+
   - name: tab-indented-block
     about: |
       #1130: only spaces were stripped when dedenting a block comment, so one

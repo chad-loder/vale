@@ -28,6 +28,28 @@ func TestInitialPositionPunctAnchor(t *testing.T) {
 	}
 }
 
+// An underscore that begins the match is part of it -- `_signal` is reported
+// from its `_` -- while one the search consumed as an emphasis boundary, as in
+// `_word_`, is not.
+func TestInitialPositionLeadingUnderscore(t *testing.T) {
+	tests := []struct {
+		name, ctx, match string
+		want             int
+	}{
+		{"match starts with underscore", "uses _zzqx here", "_zzqx", 6},
+		{"underscore as a boundary", "an _emphasis_ word", "emphasis", 5},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			at := strings.Index(tt.ctx, tt.match)
+			a := Alert{Match: tt.match, Span: []int{at, at + len(tt.match)}}
+			if pos, _ := initialPosition(tt.ctx, tt.ctx, a); pos != tt.want {
+				t.Errorf("pos = %d, want %d", pos, tt.want)
+			}
+		})
+	}
+}
+
 // A match butted directly against a code span's delimiter is inside (or
 // beside) that span, and locating an alert there mislocates it -- the prose
 // occurrence the rule actually matched sits later in the line. fs[1] is

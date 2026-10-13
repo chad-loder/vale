@@ -601,6 +601,7 @@ func (l *Linter) lintBlock(f *core.File, blk nlp.Block, lines, pad int, lookup b
 				continue
 			}
 			setLevel(&found[i][j], f, info, r.name)
+			found[i][j].Sic = f.SicApplies(r.name, info.Extends)
 			f.AddAlert(found[i][j], blk, lines, pad, lookup)
 		}
 	}
@@ -649,6 +650,7 @@ func (l *Linter) lintBlockSerial(f *core.File, blk nlp.Block, rules []scopedRule
 				continue
 			}
 			setLevel(&alerts[i], f, info, name)
+			alerts[i].Sic = f.SicApplies(name, info.Extends)
 			f.AddAlert(alerts[i], blk, lines, pad, lookup)
 		}
 	}

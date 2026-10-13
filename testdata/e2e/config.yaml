@@ -1432,3 +1432,35 @@ cases:
     exit: 1
     want: |
       test.md:1:6:Vale.Spelling:Did you really mean 'recieve'?
+
+  - name: sic
+    about: with `Sic = YES`, a `[sic]` or `(sic)` right after a misspelling
+      withdraws that spelling alert, in prose and in a code comment; a rule of
+      another kind still reports, and so does the same word without a marker
+    files:
+      _vale: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*]
+        BasedOnStyles = Vale, T
+        Sic = YES
+      styles/T/Zebra.yml: |
+        extends: existence
+        message: "Found '%s'."
+        level: error
+        tokens:
+          - ZEBRA
+      test.md: |
+        The note said "recieve" [sic], and ZEBRA [sic] stays.
+
+        It said recieve again.
+      test.ts: |
+        // Quoted recieve (sic), then recieve again.
+        x();
+    args: test.md test.ts
+    exit: 1
+    want: |
+      test.md:1:36:T.Zebra:Found 'ZEBRA'.
+      test.md:3:9:Vale.Spelling:Did you really mean 'recieve'?
+      test.ts:1:31:Vale.Spelling:Did you really mean 'recieve'?

@@ -36,6 +36,11 @@ type Comment struct {
 	// Masks are the ranges of Text that hold no prose; an alert inside one
 	// is dropped. See doc.go.
 	Masks []Mask `json:"-"`
+	// Merged is set when the comment is a run of line comments joined into
+	// one. Each line of its Source is then that line comment's own text,
+	// starting at its delimiter; in any other comment, Source lines after the
+	// first are whole lines of the file.
+	Merged bool `json:"-"`
 }
 
 // StripAt returns what came off the front of a line, 1-based as alerts are.
@@ -110,6 +115,7 @@ func coalesce(comments []Comment) []Comment {
 
 			last.Text = attachRun(last.Text, tBuf.String())
 			last.Source = attachRun(last.Source, sBuf.String())
+			last.Merged = true
 
 			joined[len(joined)-1] = last
 

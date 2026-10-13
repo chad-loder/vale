@@ -2,6 +2,7 @@ package lint
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"github.com/vale-cli/vale/v3/internal/core"
 	"github.com/vale-cli/vale/v3/internal/lint/code"
@@ -13,6 +14,24 @@ func findLine(s string, line int) string {
 		return ""
 	}
 	return lines[line-1]
+}
+
+// delimiterWidth is the width, in runes, of the comment opener at the start of
+// line as the language's delimiter pattern matches it. Without a pattern, or
+// when it does not match at the start, it falls back to the padding with its
+// trailing spaces removed.
+func delimiterWidth(lang *code.Language, line string, padding int) int {
+	if lang.Delims != nil {
+		if loc := lang.Delims.FindStringIndex(line); loc != nil && loc[0] == 0 {
+			return len([]rune(line[:loc[1]]))
+		}
+	}
+	runes := []rune(line)
+	n := min(padding, len(runes))
+	for n > 0 && runes[n-1] == ' ' {
+		n--
+	}
+	return n
 }
 
 func leadingSpaces(line string, offset int) int {
@@ -32,7 +51,10 @@ func adjustAlerts(alerts []core.Alert, last int, comment code.Comment, lang *cod
 		if i >= last {
 			line := findLine(comment.Source, alerts[i].Line)
 
-			padding := commentPadding(comment, alerts[i].Line, line, lang)
+			padding, ok := anchoredPadding(comment, alerts[i].Line, line, lang)
+			if !ok {
+				padding = commentPadding(comment, alerts[i].Line, line, lang)
+			}
 
 			alerts[i].Line += comment.Line - 1
 			alerts[i].Span = []int{
@@ -42,6 +64,42 @@ func adjustAlerts(alerts []core.Alert, last int, comment code.Comment, lang *cod
 		}
 	}
 	return alerts
+}
+
+// anchoredPadding places a line of the extracted comment by finding it in its
+// source line. Extraction only removes a prefix -- the opener, the indentation,
+// a JSDoc ` *` -- and the closer, so the extracted text, less trailing space,
+// is a substring of the source line, and where it starts is the exact padding.
+// Searching starts after the opener so the text cannot be found inside it.
+//
+// How a source line relates to the file depends on the comment. Every line of
+// a merged run of line comments is that comment's own text: it starts with its
+// delimiter, at the column comment.Offset places. Any other comment's first
+// line is the same, but each later line is the whole file line, so the offset
+// the caller adds comes back off.
+func anchoredPadding(comment code.Comment, line int, source string, lang *code.Language) (int, bool) {
+	text := strings.TrimRight(findLine(comment.Text, line), " \t")
+	if text == "" {
+		return 0, false
+	}
+
+	opener := line == 1 || comment.Merged
+	from := 0
+	if opener && lang.Delims != nil {
+		if loc := lang.Delims.FindStringIndex(source); loc != nil && loc[0] == 0 {
+			from = loc[1]
+		}
+	}
+	i := strings.Index(source[from:], text)
+	if i < 0 {
+		return 0, false
+	}
+
+	padding := utf8.RuneCountInString(source[:from+i])
+	if !opener {
+		padding -= comment.Offset
+	}
+	return padding, true
 }
 
 // commentPadding returns how far to move an alert to get from a column in the
@@ -64,10 +122,12 @@ func commentPadding(comment code.Comment, line int, source string, lang *code.La
 		// line the alert is measured against, so it is added here. On any line
 		// but the first there is no delimiter and this contributes nothing.
 		if p := lang.Padding(source); line == 1 && p > 0 {
-			// The delimiter line: Padding counts the marker and the spaces
-			// after it, and those spaces are also what the dedent took off,
-			// so adding the strip would count them twice.
-			return p
+			// The delimiter line: the marker the language's own delimiter
+			// pattern removed, plus everything the strip took after it.
+			// Measuring the marker with that pattern keeps `/**` exact in
+			// a language that strips all of it (JavaScript) and in one that
+			// strips `/*` and leaves the `* ` to the strip (TypeScript).
+			return delimiterWidth(lang, source, p) + n
 		}
 		return lang.Padding(source) + max(n-comment.Offset, 0)
 	}
